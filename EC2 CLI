@@ -1,1 +1,273 @@
-This is a file for EC2 CLI 
+WINDOWS CMD :
+
+Step	Command	Purpose
+1	aws configure set region us-east-1	Set region
+2	aws ec2 create-key-pair	Create SSH key
+3	aws ec2 create-security-group	Create security group
+4	aws ec2 authorize-security-group-ingress	Allow SSH
+5	aws ec2 describe-images	Find AMI
+6	aws ec2 run-instances	Launch instance
+7	aws ec2 describe-instances	Check status
+8	ssh -i my-key.pem ec2-user@...	Connect
+9	aws ec2 stop-instances	Stop or delete
+
+Step 1: Choose your region
+RUN:
+aws configure set region us-east-1
+
+Step 2: Create a Key Pair
+RUN:
+aws ec2 create-key-pair --key-name my-key --query "KeyMaterial" --output text > my-key.pem
+chmod 400 my-key.pem
+
+Step 3: Create a Security Group
+RUN:
+aws ec2 create-security-group --group-name my-sg --description "Allow SSH access"
+-you will get group id copy that group id for next step
+
+Step 4: Allow SSH (port 22)
+RUN:
+aws ec2 authorize-security-group-ingress \
+    --group-id <GroupId> \
+    --protocol tcp \
+    --port 22 \
+    --cidr 0.0.0.0/0
+
+Step 5: Find the Latest Amazon Linux 2 AMI (Free Tier)
+RUN:
+aws ec2 describe-images \
+    --owners amazon \
+    --filters "Name=name,Values=amzn2-ami-hvm-*-x86_64-gp2" \
+    --query "Images[*].[ImageId,Name]" \
+    --output text | sort
+
+ami-0abcdef1234567890  amzn2-ami-hvm-2.0.2024...
+- copy the AMI ID for next step
+
+Step 6: Launch the EC2 Instance
+RUN:
+aws ec2 run-instances \
+    --image-id <AMI-ID> \
+    --count 1 \
+    --instance-type t3.micro \
+    --key-name my-key \
+    --security-group-ids <GroupId> \
+    --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=MyFreeTierInstance}]'
+- output come with Instance ID copy the ID for next
+
+Step 7: Verify Instance Status
+RUN:
+aws ec2 describe-instances --instance-ids i-0123456789abcdef0 --query "Reservations[*].Instances[*].[InstanceId,State.Name,PublicDnsName]" --output table
+
+-- OUTPUT ----------------------------------------------
+|           DescribeInstances               |
++------------------------+---------+-------------------------------+
+|  i-0123456789abcdef0   | running | ec2-54-210-1-123.compute-1.amazonaws.com |
++------------------------+---------+-------------------------------+
+
+Step 8: Connect to your EC2 instance
+ssh -i my-key.pem ec2-user@ec2-54-210-1-123.compute-1.amazonaws.com
+
+Boom 💥 You’re now inside your EC2 instance, all from WSL Ubuntu!
+
+Step 9: (Important) Stop or Terminate When Done
+RUN:
+	aws ec2 stop-instances --instance-ids i-0123456789abcdef0
+	aws ec2 terminate-instances --instance-ids i-0123456789abcdef0
+............................................................................
+LINUX UBUNTU :
+
+Step	Command	Purpose
+1	aws configure set region us-east-1		Set region
+2	aws ec2 create-key-pair				Create SSH key
+3	aws ec2 create-security-group			Create firewall
+4	aws ec2 authorize-security-group-ingress	Allow SSH
+5	aws ec2 describe-images				Get AMI
+6	aws ec2 run-instances				Launch EC2
+7	aws ec2 describe-instances			Check status
+8	ssh -i my-key.pem ec2-user@...			Connect
+9	aws ec2 stop-instances				Stop or delete
+
+Step 1: Choose your region
+RUN:
+aws configure set region us-east-1
+
+Step 2: Create a Key Pair
+RUN:
+aws ec2 create-key-pair --key-name my-key --query "KeyMaterial" --output text > my-key.pem
+chmod 400 my-key.pem
+
+Step 3: Create a Security Group
+RUN:
+aws ec2 create-security-group \
+  --group-name my-sg \
+  --description "Allow SSH access"
+
+-you will get group id copy that group id for next step
+OUTPUT EXAMPLE
+{
+    "GroupId": "sg-0abc1234d5e6f7890"
+}
+
+Step 4: Allow SSH (port 22) - Replace <GroupId> with your actual value:
+RUN:
+aws ec2 authorize-security-group-ingress \
+  --group-id <GroupId> \
+  --protocol tcp \
+  --port 22 \
+  --cidr 0.0.0.0/0
+(This opens port 22 for SSH (you can later restrict it to your IP).)
+
+Step 5: Get the Latest Amazon Linux 2 AMI (Free Tier)
+RUN:
+aws ec2 describe-images \
+  --owners amazon \
+  --filters "Name=name,Values=amzn2-ami-hvm-*-x86_64-gp2" \
+  --query "Images[*].[ImageId,Name]" \
+  --output text | sort | tail -n 1
+Example output:
+ami-0abcdef1234567890  amzn2-ami-hvm-2.0.2024...
+Copy the AMI ID (starts with ami-).
+
+Step 6: Launch Your EC2 Instance
+Replace these placeholders:
+<AMI-ID> → your AMI ID (e.g., ami-0abcdef1234567890)
+<GroupId> → your security group ID
+my-key → your key name
+RUN:
+aws ec2 run-instances \
+  --image-id <AMI-ID> \
+  --count 1 \
+  --instance-type t2.micro \
+  --key-name my-key \
+  --security-group-ids <GroupId> \
+  --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=MyWSLInstance}]'
+Output will include:
+"InstanceId": "i-0123456789abcdef0"
+
+Step 7: Check Instance Status
+RUN:
+aws ec2 describe-instances \
+  --instance-ids i-0123456789abcdef0 \
+  --query "Reservations[*].Instances[*].[InstanceId,State.Name,PublicDnsName]" \
+  --output table
+
+Example output:---------------------------------------------
+|           DescribeInstances               |
++------------------------+---------+-------------------------------+
+|  i-0123456789abcdef0   | running | ec2-54-210-1-123.compute-1.amazonaws.com |
++------------------------+---------+-------------------------------+
+When it says running, your instance is live.
+
+Step 8: Connect to Your Instance via SSH
+Copy the Public DNS from above and connect:
+RUN:
+ssh -i my-key.pem ec2-user@ec2-54-210-1-123.compute-1.amazonaws.com
+
+Boom 💥 You’re now inside your EC2 instance, all from WSL Ubuntu!
+
+Step 9: (Important) Stop or Terminate When Done
+RUN:
+	aws ec2 stop-instances --instance-ids i-0123456789abcdef0
+	aws ec2 terminate-instances --instance-ids i-0123456789abcdef0
+
+Simple — Auto-stop with AWS CLI + sleep
+RUN:
+(sleep 7200 && aws ec2 stop-instances --instance-ids i-0123456789abcdef0) &
+
+Explanation:
+
+sleep 7200 → waits 7200 seconds (2 hours)
+
+aws ec2 stop-instances → stops your instance
+
+& → runs it in the background, so your terminal stays free
+
+You can check background jobs using:
+- RUN: jobs
+----------------------------------------------------------------------------------------------------------
+
+ Option 1: Using the AWS Toolkit for VS Code (Easiest way)
+🧩 Step 1: Install the AWS Toolkit extension
+
+Open VS Code.
+
+Go to the Extensions tab (or press Ctrl + Shift + X / Cmd + Shift + X).
+
+Search for “AWS Toolkit”.
+
+Click Install (by Amazon Web Services).
+
+🔑 Step 2: Connect your AWS account
+
+After installing, click the AWS icon on the sidebar.
+
+Click Connect to AWS.
+
+You can either:
+
+Use your AWS Access Key ID and Secret Access Key, or
+
+Use an existing named profile from your AWS CLI configuration.
+
+📝 Tip: If you haven’t configured your AWS CLI yet, run:
+aws configure
+
+And enter your keys, default region (e.g. us-east-1), and output format (json).
+
+☁️ Step 3: Create an EC2 instance
+Once connected:
+
+In the AWS Explorer panel (left side of VS Code):
+
+Expand Amazon EC2.
+
+Click Instances.
+
+Click the “+” icon (or right-click → “Create new instance”).
+
+Follow the prompts:
+
+Choose an AMI (Amazon Machine Image) — e.g. Amazon Linux 2.
+
+Choose an Instance Type (e.g. t2.micro for free tier).
+
+Set key pair, security group, region, etc.
+
+Click Create Instance.
+
+
+✅ The instance will launch, and you’ll see it listed in the AWS Explorer.
+
+🖥️ Step 4: Connect to your EC2 instance
+You can:
+
+
+Right-click the instance → Connect with SSH (VS Code can open a terminal directly).
+
+
+Or copy the SSH command and connect manually:
+ssh -i path/to/key.pem ec2-user@<your-ec2-public-ip>
+
+🧠 Option 2: Using the AWS CLI from VS Code’s Terminal
+If you prefer the command line:
+
+Install and configure the AWS CLI:
+aws configure
+
+Create a key pair:
+aws ec2 create-key-pair --key-name my-key --query 'KeyMaterial' --output text > my-key.pem
+chmod 400 my-key.pem
+
+Launch an EC2 instance:
+aws ec2 run-instances \
+  --image-id ami-0c02fb55956c7d316 \
+  --instance-type t2.micro \
+  --key-name my-key \
+  --security-group-ids sg-12345678 \
+  --subnet-id subnet-12345678
+
+List instances:
+aws ec2 describe-instances
+
+
